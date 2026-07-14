@@ -53,4 +53,20 @@ public class ChatController {
         String destination = "/topic/chat/" + message.chatId();
         messagingTemplate.convertAndSend(destination, joinMessage);
     }
+
+    @MessageMapping("/chat.deleteUser")
+    public void deleteUser(@Payload ChatMessage message) {
+        ChatMessage exitMessage = new ChatMessage(
+                null,
+                "System",
+                message.sender(),
+                message.sender() + "покинул чат",
+                message.chatId(),
+                LocalDateTime.now(),
+                MessageStatus.SENT
+        );
+
+        String destination = "/topic/chat" + message.chatId();
+        messagingTemplate.convertAndSend(destination, exitMessage);
+    }
 }

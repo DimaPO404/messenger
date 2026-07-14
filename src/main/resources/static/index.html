@@ -2,131 +2,46 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Тест Мессенджера</title>
-    <!-- Подключаем SockJS и Stomp -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Мессенджер</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Библиотеки для WebSocket -->
     <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
-    <style>
-        body { font-family: Arial, sans-serif; max-width: 600px; margin: 20px auto; padding: 20px; }
-        .form-group { margin-bottom: 15px; }
-        label { display: block; margin-bottom: 5px; font-weight: bold; }
-        input { width: 100%; padding: 8px; box-sizing: border-box; }
-        button { padding: 10px 15px; background-color: #007bff; color: white; border: none; cursor: pointer; }
-        button:hover { background-color: #0056b3; }
-        #chat-window { border: 1px solid #ccc; height: 300px; overflow-y: scroll; padding: 10px; margin-bottom: 15px; background-color: #f9f9f9; }
-        .message { margin-bottom: 8px; padding: 8px; border-radius: 5px; }
-        .message.system { background-color: #e9ecef; color: #6c757d; text-align: center; font-style: italic; }
-        .message.user { background-color: #d1ecf1; color: #0c5460; text-align: right; }
-        .hidden { display: none; }
-    </style>
 </head>
 <body>
 
-<!-- Экран входа -->
-<div id="login-screen">
-    <h2>Вход в чат</h2>
-    <div class="form-group">
-        <label>Твое имя:</label>
-        <input type="text" id="username" placeholder="Например: Дмитрий">
+<div class="container">
+    <!-- Экран регистрации/входа -->
+    <div id="auth-view" class="view active">
+        <h2>Регистрация</h2>
+        <form id="register-form">
+            <input type="text" id="reg-name" placeholder="Отображаемое имя" required>
+            <input type="text" id="reg-userId" placeholder="Уникальный ID (например, @dima)" required>
+            <input type="tel" id="reg-phone" placeholder="Телефон (+7...)" required>
+            <input type="password" id="reg-password" placeholder="Пароль (мин. 5 символов)" required>
+            <input type="text" id="reg-description" placeholder="О себе (необязательно)">
+            <button type="submit">Создать аккаунт</button>
+        </form>
+        <p id="auth-error" class="error-message"></p>
     </div>
-    <div class="form-group">
-        <label>ID чата (например, 1):</label>
-        <input type="number" id="chatId" value="1">
+
+    <!-- Экран чата -->
+    <div id="chat-view" class="view">
+        <div class="chat-header">
+            <h2>Чат <span id="chat-id-display">#1</span></h2>
+            <button id="logout-btn" class="btn-danger">Выйти</button>
+        </div>
+
+        <div id="chat-window"></div>
+
+        <form id="message-form">
+            <input type="text" id="message-input" placeholder="Напишите сообщение..." autocomplete="off">
+            <button type="submit">Отправить</button>
+        </form>
     </div>
-    <button onclick="connect()">Войти в чат</button>
 </div>
 
-<!-- Экран чата -->
-<div id="chat-screen" class="hidden">
-    <h2>Чат <span id="display-chat-id"></span></h2>
-    <div id="chat-window"></div>
-    <div class="form-group">
-        <input type="text" id="message-input" placeholder="Введите сообщение..." onkeypress="handleEnter(event)">
-    </div>
-    <button onclick="sendMessage()">Отправить</button>
-    <button onclick="location.reload()" style="background-color: #dc3545; margin-left: 10px;">Выйти</button></div>
-
-<script>
-    let stompClient = null;
-    let currentChatId = null;
-    let currentUsername = null;
-
-    function connect() {
-        currentUsername = document.getElementById('username').value.trim();
-        currentChatId = document.getElementById('chatId').value.trim();
-
-        if (!currentUsername || !currentChatId) {
-            alert("Введите имя и ID чата!");
-            return;
-        }
-
-        // 1. Подключаемся к эндпоинту /ws
-        const socket = new SockJS('/ws');
-        stompClient = Stomp.over(socket);
-
-        // 2. Устанавливаем соединение
-        stompClient.connect({}, function (frame) {
-            console.log('Connected: ' + frame);
-
-            // Переключаем экран
-            document.getElementById('login-screen').classList.add('hidden');
-            document.getElementById('chat-screen').classList.remove('hidden');
-            document.getElementById('display-chat-id').innerText = '#' + currentChatId;
-
-            // 3. Подписываемся на конкретный чат!
-            const destination = '/topic/chat/' + currentChatId;
-            stompClient.subscribe(destination, function (message) {
-                const receivedMessage = JSON.parse(message.body);
-                displayMessage(receivedMessage);
-            });
-
-            // 4. Отправляем сообщение о входе в чат
-            stompClient.send("/app/chat.addUser", {}, JSON.stringify({
-                sender: currentUsername,
-                chatId: currentChatId
-            }));
-        });
-    }
-
-    function sendMessage() {
-        const messageInput = document.getElementById('message-input');
-        const content = messageInput.value.trim();
-
-        if (content && stompClient) {
-            // Отправляем сообщение на сервер
-            stompClient.send("/app/chat.sendMessage", {}, JSON.stringify({
-                sender: currentUsername,
-                recipient: "all", // Пока не используем, но поле есть
-                content: content,
-                chatId: currentChatId,
-                status: "SENT"
-            }));
-            messageInput.value = ''; // Очистить поле
-        }
-    }
-
-    function displayMessage(message) {
-        const chatWindow = document.getElementById('chat-window');
-        const messageDiv = document.createElement('div');
-
-        if (message.sender === 'System') {
-            messageDiv.className = 'message system';
-            messageDiv.innerText = message.content;
-        } else {
-            messageDiv.className = 'message user';
-            // Форматируем время, если нужно, пока просто текст
-            messageDiv.innerHTML = `<strong>${message.sender}:</strong> ${message.content}`;
-        }
-
-        chatWindow.appendChild(messageDiv);
-        chatWindow.scrollTop = chatWindow.scrollHeight; // Автопрокрутка вниз
-    }
-
-    function handleEnter(event) {
-        if (event.key === 'Enter') {
-            sendMessage();
-        }
-    }
-</script>
+<script src="app.js"></script>
 </body>
 </html>
