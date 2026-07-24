@@ -83,7 +83,7 @@ async function handleLogin(e) {
             showGlobalError('login', errText || 'Ошибка входа');
         }
     } catch (error) {
-        showGlobalError('login', 'Ошибка сети. Проверьте подключение.');
+        showGlobalError('login', 'Ошибка сети. Проверьте подключение. ');
     }
 }
 
