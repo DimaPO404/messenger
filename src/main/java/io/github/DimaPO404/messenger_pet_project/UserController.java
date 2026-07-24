@@ -26,7 +26,13 @@ public class UserController {
                 User created = userService.createUser(user);
                 return ResponseEntity.status(HttpStatus.OK).body(created);
             } catch (IllegalArgumentException e) {
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Failed to create an account" + e.getMessage());
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(" Failed to create an account" + e.getMessage());
             }
+    }
+
+    @PostMapping("/login")
+    public ResponseEntity<?> loginUser (@RequestBody LoginRequest request) {
+        User loginUser = userService.loginUser(request.getUserId(), request.getPassword());
+        return ResponseEntity.ok(loginUser);
     }
 }

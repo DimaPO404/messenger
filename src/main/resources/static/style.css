@@ -1,139 +1,136 @@
-:root {
-    --primary: #4a90e2;
-    --primary-hover: #357abd;
-    --bg: #f4f7f6;
-    --chat-bg: #ffffff;
-    --text: #333;
-    --msg-user: #dcf8c6;
-    --msg-system: #f0f0f0;
-}
-
 body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background-color: var(--bg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    background: #f0f2f5;
     margin: 0;
     display: flex;
     justify-content: center;
     align-items: center;
-    height: 100vh;
-    color: var(--text);
+    min-height: 100vh;
 }
 
 .container {
     width: 100%;
-    max-width: 500px;
-    background: var(--chat-bg);
+    max-width: 450px;
+    background: white;
     border-radius: 12px;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
     overflow: hidden;
-    height: 80vh;
-    display: flex;
-    flex-direction: column;
 }
 
-.view { display: none; flex-direction: column; height: 100%; }
-.view.active { display: flex; }
+.hidden { display: none !important; }
 
-/* Auth Form */
-#auth-view {
-    padding: 40px 30px;
-    justify-content: center;
+/* Вкладки авторизации */
+.auth-tabs { display: flex; border-bottom: 1px solid #eee; }
+.tab-btn {
+    flex: 1; padding: 15px; border: none; background: #f9f9f9;
+    cursor: pointer; font-size: 16px; font-weight: 600; color: #888;
 }
-#auth-view h2 { text-align: center; margin-bottom: 20px; }
-#auth-view input {
-    width: 100%;
-    padding: 12px;
-    margin-bottom: 15px;
-    border: 1px solid #ddd;
+.tab-btn.active { background: white; color: #4a90e2; border-bottom: 2px solid #4a90e2; }
+
+/* Формы */
+.auth-form { display: none; padding: 30px; }
+.auth-form.active { display: block; }
+.form-group { margin-bottom: 15px; }
+.form-group input {
+    width: 100%; padding: 12px; border: 1px solid #ddd;
+    border-radius: 6px; font-size: 14px; box-sizing: border-box;
+}
+.form-group input.input-error { border-color: #e74c3c; background: #fdf2f2; }
+.error-text {
+    color: #e74c3c; font-size: 12px; margin-top: 5px; display: none;
+}
+.error-text.visible { display: block; }
+
+.btn-primary {
+    width: 100%; padding: 12px; background: #4a90e2; color: white;
+    border: none; border-radius: 6px; cursor: pointer; font-size: 16px; margin-top: 10px;
+}
+.btn-primary:hover { background: #357abd; }
+.global-error {
+    color: #e74c3c;
+    text-align: center;
+    margin-top: 15px;
+    font-size: 14px;
+    display: none;
+    padding: 10px;
     border-radius: 6px;
-    box-sizing: border-box;
+    background-color: #fdf2f2;
+    border: 1px solid #f5c6cb;
 }
-#auth-view button {
-    width: 100%;
-    padding: 12px;
-    background: var(--primary);
-    color: white;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 16px;
-}
-#auth-view button:hover { background: var(--primary-hover); }
-.error-message { color: #e74c3c; text-align: center; font-size: 14px; min-height: 20px;}
 
-/* Chat View */
+/* Чат */
+#chat-screen { height: 600px; display: flex; flex-direction: column; }
 .chat-header {
-    padding: 15px 20px;
-    background: var(--primary);
-    color: white;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+    padding: 20px; background: #4a90e2; color: white;
+    display: flex; justify-content: space-between; align-items: center;
 }
-.btn-danger {
-    background: #e74c3c;
-    color: white;
-    border: none;
-    padding: 6px 12px;
-    border-radius: 4px;
-    cursor: pointer;
+#logout-btn {
+    background: rgba(255,255,255,0.2); color: white; border: none;
+    padding: 8px 16px; border-radius: 6px; cursor: pointer;
 }
 
 #chat-window {
-    flex: 1;
-    padding: 20px;
-    overflow-y: auto;
-    background: #e5ddd5;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
+    flex: 1; padding: 20px; background: #e5ddd5;
+    overflow-y: auto; display: flex; flex-direction: column; gap: 10px;
 }
 
+/* Сообщения */
 .message {
-    max-width: 70%;
-    padding: 10px 15px;
-    border-radius: 10px;
-    font-size: 14px;
-    line-height: 1.4;
+    max-width: 75%; padding: 10px 14px; border-radius: 12px;
+    font-size: 14px; word-wrap: break-word; position: relative;
 }
 .message.system {
-    align-self: center;
-    background: var(--msg-system);
-    color: #777;
-    font-style: italic;
-    max-width: 90%;
-    text-align: center;
+    align-self: center; background: #e9ecef; color: #666;
+    font-style: italic; text-align: center; font-size: 12px; max-width: 90%;
 }
-.message.user {
-    align-self: flex-end;
-    background: var(--msg-user);
-    border-bottom-right-radius: 2px;
-}
-.message .sender {
-    font-size: 11px;
-    color: #555;
-    margin-bottom: 4px;
-    font-weight: bold;
+.message.own { align-self: flex-end; background: #dcf8c6; border-bottom-right-radius: 4px; }
+.message.other { align-self: flex-start; background: #ffffff; border-bottom-left-radius: 4px; }
+
+.message .sender { font-size: 11px; color: #4a90e2; font-weight: bold; margin-bottom: 4px; }
+.message .time {
+    font-size: 10px;
+    color: #888;
+    text-align: right;
+    margin-top: 4px;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 4px;
 }
 
+/* Пометка "изменено" */
+.edited-mark {
+    font-size: 9px;
+    color: #999;
+    font-style: italic;
+}
+
+/* Кнопки действий для своих сообщений */
+.message-actions {
+    margin-top: 6px; text-align: right; border-top: 1px solid rgba(0,0,0,0.05);
+    padding-top: 4px; display: flex; justify-content: flex-end; gap: 10px;
+}
+.message-actions button {
+    background: none; border: none; cursor: pointer; font-size: 14px; opacity: 0.6;
+    transition: opacity 0.2s;
+}
+.message-actions button:hover { opacity: 1; }
+.btn-edit:hover { color: #4a90e2; }
+.btn-delete:hover { color: #e74c3c; }
+
 #message-form {
-    display: flex;
-    padding: 15px;
-    background: #f0f0f0;
-    gap: 10px;
+    padding: 15px; background: white; display: flex; gap: 10px; border-top: 1px solid #eee;
 }
 #message-form input {
-    flex: 1;
-    padding: 10px;
-    border: 1px solid #ddd;
-    border-radius: 20px;
-    outline: none;
+    flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 20px; outline: none;
+    transition: all 0.3s;
+}
+#message-form input.editing {
+    border-color: #4a90e2;
+    background-color: #f0f7ff;
+    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
 }
 #message-form button {
-    background: var(--primary);
-    color: white;
-    border: none;
-    padding: 0 20px;
-    border-radius: 20px;
-    cursor: pointer;
+    background: #4a90e2; color: white; border: none; width: 44px; height: 44px;
+    border-radius: 50%; cursor: pointer; font-size: 18px;
 }

@@ -3,45 +3,73 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Мессенджер</title>
-    <link rel="stylesheet" href="style.css">
-    <!-- Библиотеки для WebSocket -->
+    <title>Messenger</title>
     <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
 <div class="container">
-    <!-- Экран регистрации/входа -->
-    <div id="auth-view" class="view active">
-        <h2>Регистрация</h2>
-        <form id="register-form">
-            <input type="text" id="reg-name" placeholder="Отображаемое имя" required>
-            <input type="text" id="reg-userId" placeholder="Уникальный ID (например, @dima)" required>
-            <input type="tel" id="reg-phone" placeholder="Телефон (+7...)" required>
-            <input type="password" id="reg-password" placeholder="Пароль (мин. 5 символов)" required>
-            <input type="text" id="reg-description" placeholder="О себе (необязательно)">
-            <button type="submit">Создать аккаунт</button>
+    <!-- Экран авторизации -->
+    <div id="auth-screen">
+        <div class="auth-tabs">
+            <button id="tab-login" class="tab-btn active">Войти</button>
+            <button id="tab-register" class="tab-btn">Регистрация</button>
+        </div>
+
+        <!-- Форма входа -->
+        <form id="login-form" class="auth-form active">
+            <div class="form-group">
+                <input type="text" id="login-userId" placeholder="@username" required>
+                <div class="error-text">Invalid user ID format (must start with @)</div>
+            </div>
+            <div class="form-group">
+                <input type="password" id="login-password" placeholder="Password" required>
+                <div class="error-text">Password is required</div>
+            </div>
+            <button type="submit" class="btn-primary">Войти</button>
+            <div id="auth-error-global" class="global-error"></div>
         </form>
-        <p id="auth-error" class="error-message"></p>
+
+        <!-- Форма регистрации -->
+        <form id="register-form" class="auth-form">
+            <div class="form-group">
+                <input type="text" id="reg-name" placeholder="Name" required>
+                <div class="error-text">Name cannot be empty</div>
+            </div>
+            <div class="form-group">
+                <input type="text" id="reg-userId" placeholder="@username" required>
+                <div class="error-text">Must start with @, 1-30 alphanumeric chars or _</div>
+            </div>
+            <div class="form-group">
+                <input type="tel" id="reg-phone" placeholder="+7..." required>
+                <div class="error-text">Invalid phone format</div>
+            </div>
+            <div class="form-group">
+                <input type="password" id="reg-password" placeholder="Password (min 5 chars)" required>
+                <div class="error-text">Password must be more than 4 symbols</div>
+            </div>
+            <div class="form-group">
+                <input type="text" id="reg-description" placeholder="Description (optional)">
+            </div>
+            <button type="submit" class="btn-primary">Зарегистрироваться</button>
+            <div id="auth-error-global-reg" class="global-error"></div>
+        </form>
     </div>
 
     <!-- Экран чата -->
-    <div id="chat-view" class="view">
+    <div id="chat-screen" class="hidden">
         <div class="chat-header">
-            <h2>Чат <span id="chat-id-display">#1</span></h2>
-            <button id="logout-btn" class="btn-danger">Выйти</button>
+            <h3>Групповой чат #1</h3>
+            <button id="logout-btn">Выйти</button>
         </div>
-
         <div id="chat-window"></div>
-
         <form id="message-form">
-            <input type="text" id="message-input" placeholder="Напишите сообщение..." autocomplete="off">
-            <button type="submit">Отправить</button>
+            <input type="text" id="message-input" placeholder="Сообщение..." autocomplete="off" required>
+            <button type="submit">➤</button>
         </form>
     </div>
 </div>
-
-<script src="app.js"></script>
+<script src="app.js?v=2"></script>
 </body>
 </html>

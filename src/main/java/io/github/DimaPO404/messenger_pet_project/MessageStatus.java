@@ -1,5 +1,5 @@
 package io.github.DimaPO404.messenger_pet_project;
 
 public enum MessageStatus {
-    SENT, DELIVERED, READ, FAILED
+    SENT, DELIVERED, READ, FAILED, DELETED
 }

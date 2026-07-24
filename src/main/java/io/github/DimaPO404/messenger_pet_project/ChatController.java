@@ -5,6 +5,7 @@ import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 
@@ -12,61 +13,62 @@ import java.time.LocalDateTime;
 public class ChatController {
 
     private SimpMessagingTemplate messagingTemplate;
+    private MessageRepository repository;
+    private final ChatService chatService;
 
     @Autowired
-    public ChatController(SimpMessagingTemplate messagingTemplate) {
+    public ChatController(SimpMessagingTemplate messagingTemplate, MessageRepository repository, ChatService chatService) {
         this.messagingTemplate = messagingTemplate;
+        this.repository = repository;
+        this.chatService = chatService;
     }
 
     @MessageMapping("/chat.sendMessage")
     public void sendMessage(@Payload ChatMessage message) {
-        if (message.content() == null || message.content().isBlank()) {
-            throw new IllegalArgumentException("Текст сообщения не может быть пустым");
-        }
+        ChatMessage savedMessage = chatService.processAndSaveMessage(message);
 
-        ChatMessage responseMessage = new ChatMessage(
-                null,
-                message.sender(),
-                message.recipient(),
-                message.content(),
-                message.chatId(),
-                LocalDateTime.now(),
-                MessageStatus.SENT
-        );
-
-        String destination = "/topic/chat/" + message.chatId();
-        messagingTemplate.convertAndSend(destination, responseMessage);
+        String destination = "/topic/chat/" + savedMessage.getChatId();
+        messagingTemplate.convertAndSend(destination, savedMessage);
     }
 
     @MessageMapping("/chat.addUser")
     public void addUser(@Payload ChatMessage message) {
-        ChatMessage joinMessage = new ChatMessage(
-                null,
-                "System",
-                message.sender(),
-                message.sender() + " присоединился к чату",
-                message.chatId(),
-                LocalDateTime.now(),
-                MessageStatus.SENT
-        );
+        ChatMessage savedMessage = chatService.addNewUserAndSaveMessage(message);
 
-        String destination = "/topic/chat/" + message.chatId();
-        messagingTemplate.convertAndSend(destination, joinMessage);
+        String destination = "/topic/chat/" + savedMessage.getChatId();
+        messagingTemplate.convertAndSend(destination, savedMessage);
     }
 
     @MessageMapping("/chat.deleteUser")
     public void deleteUser(@Payload ChatMessage message) {
-        ChatMessage exitMessage = new ChatMessage(
-                null,
-                "System",
-                message.sender(),
-                message.sender() + "покинул чат",
-                message.chatId(),
-                LocalDateTime.now(),
-                MessageStatus.SENT
+        ChatMessage savedMessage = chatService.deleteUserAndSaveMessage(message);
+
+        String destination = "/topic/chat/" + message.getChatId();
+        messagingTemplate.convertAndSend(destination, savedMessage);
+    }
+
+    @MessageMapping("/chat.deleteMessage")
+    @Transactional
+    public void deleteMessage(@Payload ChatMessage message) {
+        ChatMessage deleteMessage = chatService.deleteMessage(
+                message.getId(),
+                message.getSender()
         );
 
-        String destination = "/topic/chat" + message.chatId();
-        messagingTemplate.convertAndSend(destination, exitMessage);
+        String destination = "/topic/chat/" + message.getChatId();
+        messagingTemplate.convertAndSend(destination, deleteMessage);
+    }
+
+    @MessageMapping("/chat.editMessage")
+    @Transactional
+    public void editMessage(@Payload ChatMessage message) {
+        ChatMessage editMessage = chatService.editMyMessage(
+                message.getId(),
+                message.getSender(),
+                message.getContent()
+        );
+
+        String destination = "/topic/chat/" + message.getChatId();
+        messagingTemplate.convertAndSend(destination, editMessage);
     }
 }
