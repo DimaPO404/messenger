@@ -50,7 +50,7 @@ public class ChatService {
         message.setTimeStamp(LocalDateTime.now());
         message.setStatus(MessageStatus.SENT);
 
-        log.info("Новый пользователь успешно присоединился к чату");
+        log.info("Новый пользователь успешно присоединился к чату ");
         return messageRepository.save(message);
     }
 
