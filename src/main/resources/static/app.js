@@ -12,7 +12,24 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('message-form').addEventListener('submit', handleSendMessage);
     document.getElementById('logout-btn').addEventListener('click', handleLogout);
     document.getElementById('chat-window').addEventListener('click', handleMessageAction);
+    document.getElementById('close-profile-modal').addEventListener('click', closeProfileModal);
+
+    checkLocalStorage();
 });
+
+function checkLocalStorage() {
+    const savedUser = localStorage.getItem('currentUser');
+    if (savedUser) {
+        try {
+            currentUser = JSON.parse(savedUser);
+            console.log('Восстановлен пользователь из localStorage:', currentUser);
+            enterChat();
+        } catch (e) {
+            console.error('Ошибка парсинга currentUser:', e);
+            localStorage.removeItem('currentUser');
+        }
+    }
+}
 
 function switchTab(tab) {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -77,13 +94,14 @@ async function handleLogin(e) {
 
         if (response.ok) {
             currentUser = await response.json();
+            localStorage.setItem('currentUser', JSON.stringify(currentUser));
             enterChat();
         } else {
             const errText = await response.text();
             showGlobalError('login', errText || 'Ошибка входа');
         }
     } catch (error) {
-        showGlobalError('login', 'Ошибка сети. Проверьте подключение. ');
+        showGlobalError('login', 'Ошибка сети. Проверьте подключение.');
     }
 }
 
@@ -118,6 +136,7 @@ async function handleRegister(e) {
 
         if (response.ok) {
             currentUser = await response.json();
+            localStorage.setItem('currentUser', JSON.stringify(currentUser));
             enterChat();
         } else {
             const errText = await response.text();
@@ -133,7 +152,7 @@ function enterChat() {
     document.getElementById('chat-screen').classList.remove('hidden');
 
     if (!currentUser || !currentUser.userId) {
-        console.error("КРИТИЧЕСКАЯ ОШИБА: currentUser или userId не определен!", currentUser);
+        console.error("КРИТИЧЕСКАЯ ОШИБКА: currentUser или userId не определен!", currentUser);
         return;
     }
 
@@ -170,7 +189,6 @@ function handleSendMessage(e) {
     if (!content || !stompClient) return;
 
     if (editingMessageId !== null) {
-        // Редактирование существующего сообщения
         stompClient.send('/app/chat.editMessage', {}, JSON.stringify({
             id: editingMessageId,
             sender: currentUser.userId,
@@ -181,7 +199,6 @@ function handleSendMessage(e) {
         input.placeholder = 'Сообщение...';
         input.classList.remove('editing');
     } else {
-        // Отправка нового сообщения
         stompClient.send('/app/chat.sendMessage', {}, JSON.stringify({
             sender: currentUser.userId, recipient: 'all', content: content, chatId: CHAT_ID, status: 'SENT'
         }));
@@ -193,14 +210,12 @@ function renderMessage(msg) {
     const chatWindow = document.getElementById('chat-window');
     const isOwn = msg.sender === currentUser.userId;
 
-    // Обработка удаления
     if (msg.status === 'DELETED') {
         const el = document.querySelector(`[data-msg-id="${msg.id}"]`);
         if (el) el.remove();
         return;
     }
 
-    // Системные сообщения
     if (msg.sender === 'System') {
         const div = document.createElement('div');
         div.className = 'message system';
@@ -210,11 +225,9 @@ function renderMessage(msg) {
         return;
     }
 
-    // Проверяем, существует ли уже сообщение с таким ID
     const existingEl = document.querySelector(`[data-msg-id="${msg.id}"]`);
 
     if (existingEl) {
-        // ОБНОВЛЕНИЕ существующего сообщения (редактирование)
         const contentDiv = existingEl.querySelector('.msg-content');
         const timeDiv = existingEl.querySelector('.time');
 
@@ -224,21 +237,18 @@ function renderMessage(msg) {
 
         if (timeDiv) {
             let timeStr = formatTime(msg.timeStamp);
-            // Добавляем пометку "изменено"
             timeDiv.innerHTML = `${timeStr} <span class="edited-mark">(изменено)</span>`;
         }
-
         return;
     }
 
-    // СОЗДАНИЕ нового сообщения
     const div = document.createElement('div');
     div.className = `message ${isOwn ? 'own' : 'other'}`;
     div.dataset.msgId = msg.id;
 
     let timeHtml = formatTime(msg.timeStamp);
-
     let actionsHtml = '';
+
     if (isOwn) {
         const safeContent = msg.content.replace(/"/g, '&quot;');
         actionsHtml = `
@@ -249,7 +259,8 @@ function renderMessage(msg) {
         `;
     }
 
-    const senderHtml = !isOwn ? `<div class="sender">${escapeHtml(msg.sender)}</div>` : '';
+    // Добавляем класс clickable и data-user-id для чужих сообщений
+    const senderHtml = !isOwn ? `<div class="sender clickable" data-user-id="${escapeHtml(msg.sender)}">${escapeHtml(msg.sender)}</div>` : '';
 
     div.innerHTML = `
         ${senderHtml}
@@ -263,32 +274,74 @@ function renderMessage(msg) {
 }
 
 function handleMessageAction(e) {
-    // Удаление сообщения
     if (e.target.classList.contains('btn-delete')) {
         const msgId = e.target.dataset.id;
-        // Отправляем без подтверждения - удаление обратимо (просто статус меняется)
         stompClient.send('/app/chat.deleteMessage', {}, JSON.stringify({
             id: parseInt(msgId), sender: currentUser.userId, chatId: CHAT_ID
         }));
         return;
     }
 
-    // Редактирование сообщения
     if (e.target.classList.contains('btn-edit')) {
         const msgId = e.target.dataset.id;
         const currentContent = e.target.dataset.content;
 
-        // Активируем режим редактирования
         editingMessageId = parseInt(msgId);
         const input = document.getElementById('message-input');
         input.value = currentContent;
         input.placeholder = '✏️ Редактирование сообщения... (нажмите Enter)';
         input.classList.add('editing');
         input.focus();
-
-        // Прокручиваем к полю ввода
         input.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
+
+    // ИСПРАВЛЕНО: Используем closest для надежного поиска кликабельного элемента
+    const clickableElement = e.target.closest('.clickable');
+    if (clickableElement) {
+        const userId = clickableElement.dataset.userId;
+        console.log('Клик по пользователю:', userId);
+        fetchAndShowUserProfile(userId);
+    }
+}
+
+// ИСПРАВЛЕНО: Правильный URL с encodeURIComponent
+async function fetchAndShowUserProfile(userId) {
+    console.log('Загрузка профиля для:', userId);
+
+    try {
+        const encodedUserId = encodeURIComponent(userId);
+        const response = await fetch(`/api/users/profile?userId=${encodedUserId}`);
+        console.log('Ответ сервера:', response.status);
+
+        if (response.ok) {
+            const userData = await response.json();
+            console.log('Данные пользователя:', userData);
+            showProfileModal(userData);
+        } else if (response.status === 404) {
+            console.warn('Пользователь не найден:', userId);
+        } else {
+            console.error('Ошибка сервера:', await response.text());
+        }
+    } catch (error) {
+        console.error('Ошибка при загрузке профиля:', error);
+    }
+}
+
+function showProfileModal(user) {
+    const modal = document.getElementById('profile-modal');
+    const avatarUrl = `https://i.pravatar.cc/150?u=${encodeURIComponent(user.userId)}`;
+
+    document.getElementById('profile-avatar').src = avatarUrl;
+    document.getElementById('profile-name').textContent = user.name;
+    document.getElementById('profile-userId').textContent = user.userId;
+    document.getElementById('profile-phone').textContent = user.phone || 'Не указан';
+    document.getElementById('profile-description').textContent = user.description || 'Нет описания';
+
+    modal.classList.remove('hidden');
+}
+
+function closeProfileModal() {
+    document.getElementById('profile-modal').classList.add('hidden');
 }
 
 function handleLogout() {
@@ -296,6 +349,7 @@ function handleLogout() {
         stompClient.send('/app/chat.deleteUser', {}, JSON.stringify({ sender: currentUser.userId, chatId: CHAT_ID }));
         stompClient.disconnect();
     }
+    localStorage.removeItem('currentUser');
     setTimeout(() => location.reload(), 300);
 }
 
@@ -324,4 +378,3 @@ window.addEventListener('beforeunload', () => {
         } catch (e) {}
     }
 });
-
