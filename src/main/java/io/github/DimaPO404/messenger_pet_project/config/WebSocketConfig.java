@@ -1,4 +1,4 @@
-package io.github.DimaPO404.messenger_pet_project;
+package io.github.DimaPO404.messenger_pet_project.config;
 
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;

@@ -1,9 +1,8 @@
-package io.github.DimaPO404.messenger_pet_project;
+package io.github.DimaPO404.messenger_pet_project.chat;
 
+import io.github.DimaPO404.messenger_pet_project.user.User;
+import io.github.DimaPO404.messenger_pet_project.user.UserRepository;
 import org.slf4j.LoggerFactory;
-import org.springframework.messaging.handler.annotation.MessageMapping;
-import org.springframework.messaging.handler.annotation.Payload;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -105,5 +104,23 @@ public class ChatService {
 
         log.info("Сообщение успешно отредактировано: {}", messageId);
         return messageRepository.save(message);
+    }
+
+    public Chat createChat(CreateChatRequest request, String creatorUserId) {
+        Chat chat = new Chat();
+        chat.setName(request.getName());
+        chat.setType(request.getType());
+        chat.setInviteCode(generativeCode());
+        chat.createdBy(creatorUserId);
+
+        Chat savedChat = chatRepository.save(chat);
+
+        addUserToChat(savedChat.getId(), creatorUserId);
+
+        for (String userId : request.getUserIds()) {
+            addUserToChat(savedChat.getId(), userId);
+        }
+
+        return savedChat;
     }
 }

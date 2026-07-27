@@ -1,9 +1,8 @@
-package io.github.DimaPO404.messenger_pet_project;
+package io.github.DimaPO404.messenger_pet_project.user;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
-import java.util.Optional;
 
 public interface UserRepository extends JpaRepository<User, Long> {
     boolean existsByUserId(String userId);

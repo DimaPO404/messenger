@@ -1,4 +1,4 @@
-package io.github.DimaPO404.messenger_pet_project;
+package io.github.DimaPO404.messenger_pet_project.user;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

@@ -1,4 +1,4 @@
-package io.github.DimaPO404.messenger_pet_project;
+package io.github.DimaPO404.messenger_pet_project.chat;
 
 public enum MessageStatus {
     SENT, DELIVERED, READ, FAILED, DELETED
