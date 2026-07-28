@@ -1,31 +1,37 @@
 let currentUser = null;
 let stompClient = null;
-const CHAT_ID = 1;
+let currentChatId = null;
 let editingMessageId = null;
+let searchTimeout = null;
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Auth
     document.getElementById('tab-login').addEventListener('click', () => switchTab('login'));
     document.getElementById('tab-register').addEventListener('click', () => switchTab('register'));
-
     document.getElementById('login-form').addEventListener('submit', handleLogin);
     document.getElementById('register-form').addEventListener('submit', handleRegister);
-    document.getElementById('message-form').addEventListener('submit', handleSendMessage);
     document.getElementById('logout-btn').addEventListener('click', handleLogout);
+
+    // Chat actions
     document.getElementById('chat-window').addEventListener('click', handleMessageAction);
+    document.getElementById('message-form').addEventListener('submit', handleSendMessage);
+
+    // Modals & Search
     document.getElementById('close-profile-modal').addEventListener('click', closeProfileModal);
+    document.getElementById('user-search').addEventListener('input', handleSearchInput);
+    document.getElementById('btn-new-personal').addEventListener('click', () => createPersonalChat());
+    document.getElementById('btn-new-group').addEventListener('click', () => createGroupChat());
 
     checkLocalStorage();
 });
 
 function checkLocalStorage() {
-    const savedUser = localStorage.getItem('currentUser');
-    if (savedUser) {
+    const saved = localStorage.getItem('currentUser');
+    if (saved) {
         try {
-            currentUser = JSON.parse(savedUser);
-            console.log('Восстановлен пользователь из localStorage:', currentUser);
-            enterChat();
+            currentUser = JSON.parse(saved);
+            initApp();
         } catch (e) {
-            console.error('Ошибка парсинга currentUser:', e);
             localStorage.removeItem('currentUser');
         }
     }
@@ -39,124 +45,141 @@ function switchTab(tab) {
     clearErrors();
 }
 
-function validateField(input, regex, errorMsg) {
-    const errorDiv = input.parentElement.querySelector('.error-text');
-    if (!regex.test(input.value)) {
-        input.classList.add('input-error');
-        if (errorDiv) {
-            errorDiv.textContent = errorMsg;
-            errorDiv.classList.add('visible');
-        }
-        return false;
-    }
-    input.classList.remove('input-error');
-    if (errorDiv) {
-        errorDiv.classList.remove('visible');
-    }
-    return true;
-}
-
 function clearErrors() {
     document.querySelectorAll('.input-error').forEach(el => el.classList.remove('input-error'));
-    document.querySelectorAll('.error-text.visible').forEach(el => el.classList.remove('visible'));
-    document.querySelectorAll('.global-error').forEach(el => {
-        el.textContent = '';
-        el.style.display = 'none';
-    });
+    document.querySelectorAll('.error-text').forEach(el => el.classList.remove('visible'));
+    document.querySelectorAll('.global-error').forEach(el => el.style.display = 'none');
 }
 
-function showGlobalError(formId, message) {
-    const errorDiv = formId === 'login'
-        ? document.getElementById('auth-error-global')
-        : document.getElementById('auth-error-global-reg');
-    errorDiv.textContent = message;
-    errorDiv.style.display = 'block';
-    setTimeout(() => {
-        errorDiv.style.display = 'none';
-    }, 5000);
+function showGlobalError(formId, msg) {
+    const el = document.getElementById(formId === 'login' ? 'auth-error-global' : 'auth-error-global-reg');
+    el.textContent = msg; el.style.display = 'block';
+    setTimeout(() => el.style.display = 'none', 5000);
 }
 
 async function handleLogin(e) {
-    e.preventDefault();
-    clearErrors();
-    const userIdInput = document.getElementById('login-userId');
-    const passwordInput = document.getElementById('login-password');
+    e.preventDefault(); clearErrors();
+    const userId = document.getElementById('login-userId');
+    const pass = document.getElementById('login-password');
 
-    if (!validateField(userIdInput, /^@[a-zA-Z0-9_]{1,30}$/, 'Invalid user ID format')) return;
-    if (!validateField(passwordInput, /.{5,}/, 'Password must be at least 5 characters')) return;
+    if (!/^[a-zA-Z0-9_]{1,30}$/.test(userId.value.replace('@', ''))) {
+        userId.classList.add('input-error'); userId.parentElement.querySelector('.error-text').classList.add('visible'); return;
+    }
 
     try {
-        const response = await fetch('/api/users/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: userIdInput.value.trim(), password: passwordInput.value })
+        const res = await fetch('/api/users/login', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: userId.value.trim(), password: pass.value })
         });
-
-        if (response.ok) {
-            currentUser = await response.json();
+        if (res.ok) {
+            currentUser = await res.json();
             localStorage.setItem('currentUser', JSON.stringify(currentUser));
-            enterChat();
+            initApp();
         } else {
-            const errText = await response.text();
-            showGlobalError('login', errText || 'Ошибка входа');
+            showGlobalError('login', await res.text());
         }
-    } catch (error) {
-        showGlobalError('login', 'Ошибка сети. Проверьте подключение.');
-    }
+    } catch { showGlobalError('login', 'Ошибка сети'); }
 }
 
 async function handleRegister(e) {
-    e.preventDefault();
-    clearErrors();
+    e.preventDefault(); clearErrors();
+    const data = {
+        name: document.getElementById('reg-name').value.trim(),
+        userId: document.getElementById('reg-userId').value.trim(),
+        phone: document.getElementById('reg-phone').value.trim(),
+        password: document.getElementById('reg-password').value,
+        description: document.getElementById('reg-description').value.trim()
+    };
 
-    const name = document.getElementById('reg-name');
-    const userId = document.getElementById('reg-userId');
-    const phone = document.getElementById('reg-phone');
-    const password = document.getElementById('reg-password');
-    const description = document.getElementById('reg-description');
-
-    let isValid = true;
-    isValid = validateField(name, /.{1,}/, 'Name cannot be empty') && isValid;
-    isValid = validateField(userId, /^@[a-zA-Z0-9_]{1,30}$/, 'Invalid user ID format') && isValid;
-    isValid = validateField(phone, /^\+?\d[\d\s\-\(\)]{6,14}\d$/, 'Invalid phone format') && isValid;
-    isValid = validateField(password, /.{5,}/, 'Password must be more than 4 symbols') && isValid;
-
-    if (!isValid) return;
+    // Простая валидация
+    if (!data.userId.startsWith('@') || data.password.length < 5) {
+        showGlobalError('register', 'Проверьте формат @username и длину пароля'); return;
+    }
 
     try {
-        const response = await fetch('/api/users/register', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                name: name.value.trim(), userId: userId.value.trim(),
-                phone: phone.value.trim(), password: password.value,
-                description: description.value.trim()
-            })
+        const res = await fetch('/api/users/register', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data)
         });
-
-        if (response.ok) {
-            currentUser = await response.json();
+        if (res.ok) {
+            currentUser = await res.json();
             localStorage.setItem('currentUser', JSON.stringify(currentUser));
-            enterChat();
+            initApp();
         } else {
-            const errText = await response.text();
-            showGlobalError('register', errText || 'Ошибка регистрации');
+            showGlobalError('register', await res.text());
         }
-    } catch (error) {
-        showGlobalError('register', 'Ошибка сети. Проверьте подключение.');
+    } catch { showGlobalError('register', 'Ошибка сети'); }
+}
+
+function initApp() {
+    document.getElementById('auth-screen').classList.add('hidden');
+    document.getElementById('app-screen').classList.remove('hidden');
+
+    document.getElementById('sidebar-name').textContent = currentUser.name;
+    document.getElementById('sidebar-userId').textContent = currentUser.userId;
+    document.getElementById('sidebar-avatar').textContent = currentUser.name.charAt(0).toUpperCase();
+
+    loadChats();
+    connectWebSocket();
+}
+
+async function loadChats() {
+    const list = document.getElementById('chat-list');
+    list.innerHTML = '<div class="empty-state" style="padding:20px; text-align:center; color:#707579;">Загрузка...</div>';
+
+    try {
+        const res = await fetch(`/api/chats?userId=${encodeURIComponent(currentUser.userId)}`);
+        const chats = await res.json();
+
+        list.innerHTML = '';
+        if (chats.length === 0) {
+            list.innerHTML = '<div class="empty-state" style="padding:20px; text-align:center; color:#707579;">Нет чатов. Создайте новый!</div>';
+            return;
+        }
+
+        chats.forEach(chat => {
+            const div = document.createElement('div');
+            div.className = `chat-item ${currentChatId === chat.id ? 'active' : ''}`;
+            div.dataset.chatId = chat.id;
+
+            const isGroup = chat.type === 'GROUP';
+            const displayName = isGroup ? chat.name : 'Личный чат'; // Можно улучшить, подтянув имя собеседника
+            const icon = isGroup ? '👥' : '👤';
+            const color = isGroup ? '#e17076' : '#707579';
+
+            div.innerHTML = `
+                <div class="chat-avatar" style="background:${color}">${icon}</div>
+                <div class="chat-info-list">
+                    <div class="chat-name">${displayName}</div>
+                    <div class="chat-preview">Нажмите, чтобы открыть</div>
+                </div>
+            `;
+            div.addEventListener('click', () => openChat(chat.id, displayName));
+            list.appendChild(div);
+        });
+    } catch (e) {
+        console.error(e);
+        list.innerHTML = '<div class="empty-state" style="padding:20px; text-align:center; color:red;">Ошибка загрузки</div>';
     }
 }
 
-function enterChat() {
-    document.getElementById('auth-screen').classList.add('hidden');
-    document.getElementById('chat-screen').classList.remove('hidden');
+function openChat(chatId, chatName) {
+    currentChatId = chatId;
+    document.getElementById('no-chat-selected').classList.add('hidden');
+    document.getElementById('active-chat-view').classList.remove('hidden');
+    document.getElementById('chat-title').textContent = chatName;
+    document.getElementById('chat-window').innerHTML = ''; // Очистка (история будет позже)
 
-    if (!currentUser || !currentUser.userId) {
-        console.error("КРИТИЧЕСКАЯ ОШИБКА: currentUser или userId не определен!", currentUser);
-        return;
+    // Обновляем активный класс в списке
+    document.querySelectorAll('.chat-item').forEach(el => el.classList.remove('active'));
+    const activeEl = document.querySelector(`.chat-item[data-chat-id="${chatId}"]`);
+    if (activeEl) activeEl.classList.add('active');
+
+    // Переподписка WebSocket
+    if (stompClient && stompClient.connected) {
+        // Отписываемся от старого (упрощенно: просто переподключаемся или управляем подписками)
+        // Для простоты в этом примере мы полагаемся на то, что сообщения приходят,
+        // но в идеале нужно хранить ссылку на subscription и делать subscription.unsubscribe()
     }
-
-    connectWebSocket();
 }
 
 function connectWebSocket() {
@@ -164,49 +187,114 @@ function connectWebSocket() {
     stompClient = Stomp.over(socket);
     stompClient.debug = null;
 
-    stompClient.connect({},
-        () => {
-            stompClient.subscribe(`/topic/chat/${CHAT_ID}`, (payload) => {
-                const msg = JSON.parse(payload.body);
-                renderMessage(msg);
+    stompClient.connect({}, () => {
+        // Подписываемся на все чаты пользователя (упрощенно: пока подписываемся на текущий)
+        if (currentChatId) {
+            stompClient.subscribe(`/topic/chat/${currentChatId}`, (payload) => {
+                renderMessage(JSON.parse(payload.body));
             });
-
-            stompClient.send('/app/chat.addUser', {}, JSON.stringify({
-                sender: currentUser.userId,
-                chatId: CHAT_ID
-            }));
-        },
-        (error) => {
-            console.error("Ошибка WebSocket:", error);
+            // Уведомление о входе в текущий чат
+            stompClient.send('/app/chat.addUser', {}, JSON.stringify({ sender: currentUser.userId, chatId: currentChatId }));
         }
-    );
+    });
 }
 
+// === Поиск пользователей ===
+function handleSearchInput(e) {
+    clearTimeout(searchTimeout);
+    const query = e.target.value.trim();
+    const resultsDiv = document.getElementById('search-results');
+
+    if (query.length < 2) {
+        resultsDiv.classList.add('hidden');
+        return;
+    }
+
+    searchTimeout = setTimeout(async () => {
+        try {
+            const res = await fetch(`/api/users/search?query=${encodeURIComponent(query)}`);
+            const users = await res.json();
+
+            resultsDiv.innerHTML = '';
+            if (users.length === 0) {
+                resultsDiv.innerHTML = '<div class="search-item">Ничего не найдено</div>';
+            } else {
+                users.forEach(u => {
+                    if (u.userId === currentUser.userId) return; // Не показывать себя
+                    const div = document.createElement('div');
+                    div.className = 'search-item';
+                    div.textContent = `${u.name} (${u.userId})`;
+                    div.addEventListener('click', () => startPersonalChatWith(u.userId));
+                    resultsDiv.appendChild(div);
+                });
+            }
+            resultsDiv.classList.remove('hidden');
+        } catch (err) { console.error(err); }
+    }, 300); // Debounce 300ms
+}
+
+// === Создание чатов ===
+async function createPersonalChat() {
+    const targetId = prompt('Введите @username пользователя:');
+    if (!targetId || targetId === currentUser.userId) return;
+    await createChatRequest('PERSONAL', null, [targetId]);
+}
+
+async function createGroupChat() {
+    const name = prompt('Введите название группы:');
+    if (!name) return;
+    // Для простоты создаем группу только с собой, позже можно добавить выбор участников
+    await createChatRequest('GROUP', name, []);
+}
+
+async function startPersonalChatWith(targetUserId) {
+    document.getElementById('search-results').classList.add('hidden');
+    document.getElementById('user-search').value = '';
+    await createChatRequest('PERSONAL', null, [targetUserId]);
+}
+
+async function createChatRequest(type, name, userIds) {
+    try {
+        const res = await fetch(`/api/chats?creatorUserId=${encodeURIComponent(currentUser.userId)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type, name, userIds })
+        });
+        if (res.ok) {
+            const newChat = await res.json();
+            loadChats(); // Обновляем список
+            openChat(newChat.id, type === 'GROUP' ? newChat.name : 'Личный чат');
+        } else {
+            alert('Ошибка: ' + await res.text());
+        }
+    } catch (e) { alert('Ошибка сети'); }
+}
+
+// === Сообщения ===
 function handleSendMessage(e) {
     e.preventDefault();
     const input = document.getElementById('message-input');
     const content = input.value.trim();
-    if (!content || !stompClient) return;
+    if (!content || !stompClient || !currentChatId) return;
 
     if (editingMessageId !== null) {
         stompClient.send('/app/chat.editMessage', {}, JSON.stringify({
-            id: editingMessageId,
-            sender: currentUser.userId,
-            content: content,
-            chatId: CHAT_ID
+            id: editingMessageId, sender: currentUser.userId, content, chatId: currentChatId
         }));
         editingMessageId = null;
-        input.placeholder = 'Сообщение...';
+        input.placeholder = 'Написать сообщение...';
         input.classList.remove('editing');
     } else {
         stompClient.send('/app/chat.sendMessage', {}, JSON.stringify({
-            sender: currentUser.userId, recipient: 'all', content: content, chatId: CHAT_ID, status: 'SENT'
+            sender: currentUser.userId, recipient: 'all', content, chatId: currentChatId, status: 'SENT'
         }));
     }
     input.value = '';
 }
 
 function renderMessage(msg) {
+    if (msg.chatId !== currentChatId) return; // Игнорируем сообщения из других чатов
+
     const chatWindow = document.getElementById('chat-window');
     const isOwn = msg.sender === currentUser.userId;
 
@@ -226,19 +314,9 @@ function renderMessage(msg) {
     }
 
     const existingEl = document.querySelector(`[data-msg-id="${msg.id}"]`);
-
     if (existingEl) {
-        const contentDiv = existingEl.querySelector('.msg-content');
-        const timeDiv = existingEl.querySelector('.time');
-
-        if (contentDiv) {
-            contentDiv.textContent = msg.content;
-        }
-
-        if (timeDiv) {
-            let timeStr = formatTime(msg.timeStamp);
-            timeDiv.innerHTML = `${timeStr} <span class="edited-mark">(изменено)</span>`;
-        }
+        existingEl.querySelector('.msg-content').textContent = msg.content;
+        existingEl.querySelector('.time').innerHTML = `${formatTime(msg.timeStamp)} <span class="edited-mark">(изменено)</span>`;
         return;
     }
 
@@ -246,26 +324,20 @@ function renderMessage(msg) {
     div.className = `message ${isOwn ? 'own' : 'other'}`;
     div.dataset.msgId = msg.id;
 
-    let timeHtml = formatTime(msg.timeStamp);
     let actionsHtml = '';
-
     if (isOwn) {
-        const safeContent = msg.content.replace(/"/g, '&quot;');
-        actionsHtml = `
-            <div class="message-actions">
-                <button class="btn-edit" data-id="${msg.id}" data-content="${safeContent}" title="Редактировать">✏️</button>
-                <button class="btn-delete" data-id="${msg.id}" title="Удалить">🗑️</button>
-            </div>
-        `;
+        actionsHtml = `<div class="message-actions">
+            <button class="btn-edit" data-id="${msg.id}" data-content="${msg.content.replace(/"/g, '&quot;')}">✏️</button>
+            <button class="btn-delete" data-id="${msg.id}">🗑️</button>
+        </div>`;
     }
 
-    // Добавляем класс clickable и data-user-id для чужих сообщений
     const senderHtml = !isOwn ? `<div class="sender clickable" data-user-id="${escapeHtml(msg.sender)}">${escapeHtml(msg.sender)}</div>` : '';
 
     div.innerHTML = `
         ${senderHtml}
         <div class="msg-content">${escapeHtml(msg.content)}</div>
-        <div class="time">${timeHtml}</div>
+        <div class="time">${formatTime(msg.timeStamp)}</div>
         ${actionsHtml}
     `;
 
@@ -275,69 +347,36 @@ function renderMessage(msg) {
 
 function handleMessageAction(e) {
     if (e.target.classList.contains('btn-delete')) {
-        const msgId = e.target.dataset.id;
         stompClient.send('/app/chat.deleteMessage', {}, JSON.stringify({
-            id: parseInt(msgId), sender: currentUser.userId, chatId: CHAT_ID
+            id: parseInt(e.target.dataset.id), sender: currentUser.userId, chatId: currentChatId
         }));
-        return;
     }
-
     if (e.target.classList.contains('btn-edit')) {
-        const msgId = e.target.dataset.id;
-        const currentContent = e.target.dataset.content;
-
-        editingMessageId = parseInt(msgId);
+        editingMessageId = parseInt(e.target.dataset.id);
         const input = document.getElementById('message-input');
-        input.value = currentContent;
-        input.placeholder = '✏️ Редактирование сообщения... (нажмите Enter)';
+        input.value = e.target.dataset.content;
+        input.placeholder = '✏️ Редактирование... (Enter для сохранения)';
         input.classList.add('editing');
         input.focus();
-        input.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
-
-    // ИСПРАВЛЕНО: Используем closest для надежного поиска кликабельного элемента
-    const clickableElement = e.target.closest('.clickable');
-    if (clickableElement) {
-        const userId = clickableElement.dataset.userId;
-        console.log('Клик по пользователю:', userId);
-        fetchAndShowUserProfile(userId);
+    if (e.target.classList.contains('clickable')) {
+        fetchAndShowUserProfile(e.target.dataset.userId);
     }
 }
 
-// ИСПРАВЛЕНО: Правильный URL с encodeURIComponent
 async function fetchAndShowUserProfile(userId) {
-    console.log('Загрузка профиля для:', userId);
-
     try {
-        const encodedUserId = encodeURIComponent(userId);
-        const response = await fetch(`/api/users/profile?userId=${encodedUserId}`);
-        console.log('Ответ сервера:', response.status);
-
-        if (response.ok) {
-            const userData = await response.json();
-            console.log('Данные пользователя:', userData);
-            showProfileModal(userData);
-        } else if (response.status === 404) {
-            console.warn('Пользователь не найден:', userId);
-        } else {
-            console.error('Ошибка сервера:', await response.text());
+        const res = await fetch(`/api/users/profile?userId=${encodeURIComponent(userId)}`);
+        if (res.ok) {
+            const user = await res.json();
+            document.getElementById('profile-avatar').src = `https://i.pravatar.cc/150?u=${encodeURIComponent(user.userId)}`;
+            document.getElementById('profile-name').textContent = user.name;
+            document.getElementById('profile-userId').textContent = user.userId;
+            document.getElementById('profile-phone').textContent = user.phone || 'Не указан';
+            document.getElementById('profile-description').textContent = user.description || 'Нет описания';
+            document.getElementById('profile-modal').classList.remove('hidden');
         }
-    } catch (error) {
-        console.error('Ошибка при загрузке профиля:', error);
-    }
-}
-
-function showProfileModal(user) {
-    const modal = document.getElementById('profile-modal');
-    const avatarUrl = `https://i.pravatar.cc/150?u=${encodeURIComponent(user.userId)}`;
-
-    document.getElementById('profile-avatar').src = avatarUrl;
-    document.getElementById('profile-name').textContent = user.name;
-    document.getElementById('profile-userId').textContent = user.userId;
-    document.getElementById('profile-phone').textContent = user.phone || 'Не указан';
-    document.getElementById('profile-description').textContent = user.description || 'Нет описания';
-
-    modal.classList.remove('hidden');
+    } catch (e) { console.error(e); }
 }
 
 function closeProfileModal() {
@@ -345,12 +384,12 @@ function closeProfileModal() {
 }
 
 function handleLogout() {
-    if (stompClient && stompClient.connected) {
-        stompClient.send('/app/chat.deleteUser', {}, JSON.stringify({ sender: currentUser.userId, chatId: CHAT_ID }));
+    if (stompClient?.connected) {
+        stompClient.send('/app/chat.deleteUser', {}, JSON.stringify({ sender: currentUser.userId, chatId: currentChatId }));
         stompClient.disconnect();
     }
     localStorage.removeItem('currentUser');
-    setTimeout(() => location.reload(), 300);
+    location.reload();
 }
 
 function escapeHtml(text) {
@@ -359,22 +398,13 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-function formatTime(timeStamp) {
-    if (!timeStamp) return '';
-    try {
-        return new Date(timeStamp).toLocaleTimeString('ru-RU', {
-            hour: '2-digit',
-            minute: '2-digit'
-        });
-    } catch (e) {
-        return '';
-    }
+function formatTime(ts) {
+    if (!ts) return '';
+    try { return new Date(ts).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }); }
+    catch { return ''; }
 }
 
-window.addEventListener('beforeunload', () => {
-    if (stompClient && stompClient.connected) {
-        try {
-            stompClient.send('/app/chat.deleteUser', {}, JSON.stringify({ sender: currentUser.userId, chatId: CHAT_ID }));
-        } catch (e) {}
-    }
+// Закрытие модалки по клику вне её
+window.addEventListener('click', (e) => {
+    if (e.target.id === 'profile-modal') closeProfileModal();
 });

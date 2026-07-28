@@ -7,6 +7,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/users")
@@ -61,6 +62,9 @@ public class UserController {
 
     @GetMapping("/search")
     public List<UserProfileDto> searchUsers(@RequestParam String query) {
-        return userRepository.findByUserIdContainingIgnoreCase(query);
+        return userRepository.findByUserIdContainingIgnoreCase(query)
+                .stream()
+                .map(user -> new UserProfileDto(user.getUserId(), user.getName(), user.getPhone(), user.getDescription()))
+                .collect(Collectors.toList());
     }
 }

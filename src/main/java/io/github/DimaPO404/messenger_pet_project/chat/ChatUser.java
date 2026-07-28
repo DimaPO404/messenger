@@ -2,7 +2,7 @@ package io.github.DimaPO404.messenger_pet_project.chat;
 
 import io.github.DimaPO404.messenger_pet_project.user.User;
 import jakarta.persistence.*;
-import org.springframework.data.annotation.Id;
+import jakarta.persistence.Id;
 
 @Entity
 public class ChatUser {
@@ -12,11 +12,11 @@ public class ChatUser {
     private Long id;
 
     @ManyToOne
-    @Column(name = "chat", nullable = false)
+    @Column(name = "chat_id", nullable = false)
     private Chat chat;
 
-    @ManyToMany
-    @Column(name = "user", nullable = false)
+    @ManyToOne
+    @Column(name = "user_id", nullable = false)
     private User user;
 
     public Long getId() {

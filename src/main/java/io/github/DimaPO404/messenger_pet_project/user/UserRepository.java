@@ -7,5 +7,5 @@ import java.util.List;
 public interface UserRepository extends JpaRepository<User, Long> {
     boolean existsByUserId(String userId);
     User findByUserId(String userId);
-    List<UserProfileDto> findByUserIdContainingIgnoreCase(String query);
+    List<User> findByUserIdContainingIgnoreCase(String query);
 }

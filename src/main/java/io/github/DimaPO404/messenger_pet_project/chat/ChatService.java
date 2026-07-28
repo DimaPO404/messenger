@@ -2,23 +2,33 @@ package io.github.DimaPO404.messenger_pet_project.chat;
 
 import io.github.DimaPO404.messenger_pet_project.user.User;
 import io.github.DimaPO404.messenger_pet_project.user.UserRepository;
+import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import org.slf4j.Logger;
-import org.springframework.transaction.annotation.Transactional;
+import java.util.List;
+import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 public class ChatService {
     private final Logger log = LoggerFactory.getLogger(ChatService.class);
 
-    private MessageRepository messageRepository;
-    private UserRepository userRepository;
+    private final MessageRepository messageRepository;
+    private final UserRepository userRepository;
+    private final ChatRepository chatRepository;
+    private final ChatUserRepository chatUserRepository;
 
-    public ChatService(MessageRepository repository, UserRepository userRepository) {
-        this.messageRepository = repository;
+    public ChatService(MessageRepository messageRepository,
+                       UserRepository userRepository,
+                       ChatRepository chatRepository,
+                       ChatUserRepository chatUserRepository) {
+        this.messageRepository = messageRepository;
         this.userRepository = userRepository;
+        this.chatRepository = chatRepository;
+        this.chatUserRepository = chatUserRepository;
     }
 
     public ChatMessage processAndSaveMessage(ChatMessage message) {
@@ -106,21 +116,122 @@ public class ChatService {
         return messageRepository.save(message);
     }
 
+    @Transactional
     public Chat createChat(CreateChatRequest request, String creatorUserId) {
+        log.info("Создание чата пользователем: {}", creatorUserId);
+
+        if (request.getType() == ChatType.PERSONAL && request.getUserIds() != null && request.getUserIds().size() == 1) {
+            Chat existingChat = findPersonalChat(creatorUserId, request.getUserIds().get(0));
+            if (existingChat != null) {
+                log.info("Личный чат уже существует, возвращаем его: {}", existingChat.getId());
+                return existingChat;
+            }
+        }
+
         Chat chat = new Chat();
         chat.setName(request.getName());
         chat.setType(request.getType());
-        chat.setInviteCode(generativeCode());
-        chat.createdBy(creatorUserId);
+
+        if (request.getType() == ChatType.GROUP) {
+            chat.setInviteCode(generateInviteCode());
+        }
+
+        chat.setCreatedBy(creatorUserId);
 
         Chat savedChat = chatRepository.save(chat);
+        log.info("Чат создан с ID: {}", savedChat.getId());
 
-        addUserToChat(savedChat.getId(), creatorUserId);
+        addUserToChat(savedChat, creatorUserId);
 
-        for (String userId : request.getUserIds()) {
-            addUserToChat(savedChat.getId(), userId);
+        if (request.getUserIds() != null) {
+            for (String userId : request.getUserIds()) {
+                if (!userId.equals(creatorUserId)) {
+                    addUserToChat(savedChat, userId);
+                }
+            }
         }
 
         return savedChat;
+    }
+
+    private Chat findPersonalChat(String userId1, String userId2) {
+        User user1 = userRepository.findByUserId(userId1);
+        User user2 = userRepository.findByUserId(userId2);
+
+        if (user1 == null || user2 == null) return null;
+
+        List<ChatUser> user1Chats = chatUserRepository.findByUserId(user1.getId());
+        List<ChatUser> user2Chats = chatUserRepository.findByUserId(user2.getId());
+
+        for (ChatUser cu1 : user1Chats) {
+            for (ChatUser cu2 : user2Chats) {
+                if (cu1.getChat().getId().equals(cu2.getChat().getId())
+                        && cu1.getChat().getType() == ChatType.PERSONAL) {
+                    return cu1.getChat();
+                }
+            }
+        }
+        return null;
+    }
+
+    @Transactional
+    public Chat joinChatByInviteCode(String inviteCode, String userId) {
+        log.info("Попытка присоединиться к чату по коду: {}", inviteCode);
+
+        Chat chat = chatRepository.findByInviteCode(inviteCode)
+                .orElseThrow(() -> new IllegalArgumentException("Чат с таким кодом не найден"));
+
+        User user = userRepository.findByUserId(userId);
+        if (user == null) {
+            throw new IllegalArgumentException("Пользователь не найден");
+        }
+
+        List<ChatUser> existingMembers = chatUserRepository.findByChatId(chat.getId());
+        boolean alreadyMember = existingMembers.stream()
+                .anyMatch(cu -> cu.getUser().getId().equals(user.getId()));
+
+        if (alreadyMember) {
+            log.warn("Пользователь {} уже состоит в чате", userId);
+            return chat;
+        }
+
+        addUserToChat(chat, userId);
+        log.info("Пользователь {} присоединился к чату {}", userId, chat.getId());
+
+        return chat;
+    }
+
+    public List<Chat> getUserChats(String userId) {
+        log.info("Получение списка чатов для пользователя: {}", userId);
+
+        User user = userRepository.findByUserId(userId);
+        if (user == null) {
+            throw new IllegalArgumentException("Пользователь не найден");
+        }
+
+        List<ChatUser> chatUsers = chatUserRepository.findByUserId(user.getId());
+
+        return chatUsers.stream()
+                .map(ChatUser::getChat)
+                .collect(Collectors.toList());
+    }
+
+    private String generateInviteCode() {
+        return UUID.randomUUID().toString();
+    }
+
+    private void addUserToChat(Chat chat, String userId) {
+        User user = userRepository.findByUserId(userId);
+
+        if (user != null) {
+            ChatUser chatUser = new ChatUser();
+            chatUser.setChat(chat);
+            chatUser.setUser(user);
+
+            chatUserRepository.save(chatUser);
+            log.info("Пользователь {} добавлен в чат {}", userId, chat.getId());
+        } else {
+            log.warn("Пользователь {} не найден, не добавлен в чат", userId);
+        }
     }
 }

@@ -1,17 +1,21 @@
 package io.github.DimaPO404.messenger_pet_project.chat;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @Controller
 public class ChatController {
 
-    private SimpMessagingTemplate messagingTemplate;
-    private MessageRepository repository;
+    private final SimpMessagingTemplate messagingTemplate;
+    private final MessageRepository repository;
     private final ChatService chatService;
 
     @Autowired
@@ -24,7 +28,6 @@ public class ChatController {
     @MessageMapping("/chat.sendMessage")
     public void sendMessage(@Payload ChatMessage message) {
         ChatMessage savedMessage = chatService.processAndSaveMessage(message);
-
         String destination = "/topic/chat/" + savedMessage.getChatId();
         messagingTemplate.convertAndSend(destination, savedMessage);
     }
@@ -32,7 +35,6 @@ public class ChatController {
     @MessageMapping("/chat.addUser")
     public void addUser(@Payload ChatMessage message) {
         ChatMessage savedMessage = chatService.addNewUserAndSaveMessage(message);
-
         String destination = "/topic/chat/" + savedMessage.getChatId();
         messagingTemplate.convertAndSend(destination, savedMessage);
     }
@@ -40,7 +42,6 @@ public class ChatController {
     @MessageMapping("/chat.deleteUser")
     public void deleteUser(@Payload ChatMessage message) {
         ChatMessage savedMessage = chatService.deleteUserAndSaveMessage(message);
-
         String destination = "/topic/chat/" + message.getChatId();
         messagingTemplate.convertAndSend(destination, savedMessage);
     }
@@ -48,11 +49,7 @@ public class ChatController {
     @MessageMapping("/chat.deleteMessage")
     @Transactional
     public void deleteMessage(@Payload ChatMessage message) {
-        ChatMessage deleteMessage = chatService.deleteMessage(
-                message.getId(),
-                message.getSender()
-        );
-
+        ChatMessage deleteMessage = chatService.deleteMessage(message.getId(), message.getSender());
         String destination = "/topic/chat/" + message.getChatId();
         messagingTemplate.convertAndSend(destination, deleteMessage);
     }
@@ -60,13 +57,28 @@ public class ChatController {
     @MessageMapping("/chat.editMessage")
     @Transactional
     public void editMessage(@Payload ChatMessage message) {
-        ChatMessage editMessage = chatService.editMyMessage(
-                message.getId(),
-                message.getSender(),
-                message.getContent()
-        );
-
+        ChatMessage editMessage = chatService.editMyMessage(message.getId(), message.getSender(), message.getContent());
         String destination = "/topic/chat/" + message.getChatId();
         messagingTemplate.convertAndSend(destination, editMessage);
+    }
+
+    @GetMapping("/api/chats")
+    public ResponseEntity<?> getUserChats(@RequestParam String userId) {
+        try {
+            List<Chat> chats = chatService.getUserChats(userId);
+            return ResponseEntity.ok(chats);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @PostMapping("/api/chats")
+    public ResponseEntity<?> createChat(@RequestBody CreateChatRequest request, @RequestParam String creatorUserId) {
+        try {
+            Chat chat = chatService.createChat(request, creatorUserId);
+            return ResponseEntity.ok(chat);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
     }
 }
